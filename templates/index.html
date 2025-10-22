@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>AI先生 ダッシュボード</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { font-family: 'UD デジタル 教科書体 N-B', sans-serif; max-width: 1000px; margin: auto; padding: 20px; background-color: #f0f2f5; }
+        .container { display: flex; gap: 20px; }
+        .main-content { flex: 3; }
+        .side-content { flex: 2; }
+        h1, h2, h3 { margin-top: 0; }
+        #bansho-container { position: relative; }
+        #bansho-area { background-color: #006633; color: white; border: 10px solid #8b4513; border-radius: 10px; padding: 20px; min-height: 400px; white-space: pre-wrap; font-size: 1.1em; line-height: 1.6; }
+        #bansho-area h2 { border-bottom: 2px solid white; padding-bottom: 5px; font-size: 1.3em; }
+        #bansho-area ul { padding-left: 20px; }
+        #bansho-area pre { background-color: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px; white-space: pre; font-family: 'Courier New', Courier, monospace; }
+        #slide-controls { margin-top: 10px; text-align: center; }
+        #slide-controls button { font-size: 1em; padding: 8px 16px; margin: 0 10px; cursor: pointer; border-radius: 5px; border: 1px solid #ccc; }
+        #slide-controls button:disabled { background-color: #eee; cursor: not-allowed; }
+        #slide-info { font-size: 1.1em; font-weight: bold; }
+        .dashboard { background-color: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: center; }
+        #current-time { font-size: 1.2em; font-weight: bold; color: #333; margin-bottom: 10px; }
+        #current-subject-display { font-size: 1.5em; font-weight: bold; color: #28a745; }
+        .button-link { display:block; text-align:center; padding:15px; background-color:#ffc107; color:black; text-decoration:none; border-radius:8px; margin-bottom:20px; font-weight:bold; }
+        details { background-color: #fff; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        summary { font-size: 1.2em; font-weight: bold; padding: 15px; cursor: pointer; list-style: '📅'; padding-left: 10px; }
+        .timetable { width: 100%; border-collapse: collapse; }
+        .timetable th, .timetable td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+        .timetable th { background-color: #007bff; color: white; }
+        .timetable .current { background-color: #ffc107; font-weight: bold; }
+        #chat-container { background-color: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #mode-selector { margin-bottom: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; text-align: center;}
+        #mode-selector label { margin: 0 5px; cursor: pointer; vertical-align: middle; }
+        #mode-selector input { vertical-align: middle; }
+        #chat-log { height: 200px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; background-color: #f9f9f9; border-radius: 5px; margin-bottom: 10px; }
+        .message { margin-bottom: 10px; padding: 8px 12px; border-radius: 15px; max-width: 80%; }
+        .user-message { background-color: #dcf8c6; margin-left: auto; }
+        .model-message { background-color: #f1f0f0; white-space: pre-wrap; word-wrap: break-word; }
+        #input-area { display: flex; }
+        #question { flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        button { padding: 10px 15px; border: none; background-color: #007bff; color: white; border-radius: 5px; cursor: pointer; margin-left: 10px; }
+        button#mic-button:disabled { background-color: #ccc; cursor: not-allowed; }
+        button#mic-button.is-recording { background-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>🏫 AI先生 ダッシュボード (5年生)</h1>
+    <div class="container">
+        <div class="main-content">
+            <h2>今日の授業</h2>
+            <div id="bansho-container">
+                <div id="bansho-area"><p>次の授業が始まるのを待っています...</p></div>
+                <div id="slide-controls" style="display:none;">
+                    <button id="prev-slide-btn">前のページ</button>
+                    <span id="slide-info"></span>
+                    <button id="next-slide-btn">次のページ</button>
+                </div>
+            </div>
+        </div>
+        <div class="side-content">
+            <div class="dashboard">
+                <div id="current-time"></div>
+                <h3>今の学習: <span id="current-subject-display"></span></h3>
+            </div>
+            <a href="/scoring" class="button-link">📝 テストを採点する</a>
+            <details>
+                <summary>時間割を見る</summary>
+                <table class="timetable" id="timetable-table">
+                    <thead><tr><th>時間</th><th>月</th><th>火</th><th>水</th><th>木</th><th>金</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </details>
+            <div id="chat-container">
+                <h2>AI先生に質問する</h2>
+                <div id="mode-selector">
+                    <input type="radio" id="mode-text" name="chat-mode" value="text" checked>
+                    <label for="mode-text">✍️ テキストチャット</label>
+                    <input type="radio" id="mode-voice" name="chat-mode" value="voice">
+                    <label for="mode-voice">🗣️ おしゃべり</label>
+                </div>
+                <div id="chat-log"></div>
+                <div id="input-area">
+                    <input type="text" id="question" placeholder="マイクかテキストで質問">
+                    <button id="mic-button">🎙️</button>
+                    <button onclick="sendQuestion()">送信</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const chatLog = document.getElementById('chat-log');
+    const questionInput = document.getElementById('question');
+    const micButton = document.getElementById('mic-button');
+    const banshoArea = document.getElementById('bansho-area');
+    const timetableBody = document.getElementById('timetable-table').getElementsByTagName('tbody')[0];
+    const slideControls = document.getElementById('slide-controls');
+    const prevSlideBtn = document.getElementById('prev-slide-btn');
+    const nextSlideBtn = document.getElementById('next-slide-btn');
+    const slideInfo = document.getElementById('slide-info');
+    let lastKnownSubject = null;
+    let currentMode = 'text';
+    let slides = [];
+    let currentSlide = 0;
+    
+    const timetable = { "1校時 (08:45-09:30)": ["国語", "算数", "理科", "社会", "国語"], "2校時 (09:40-10:25)": ["算数", "国語", "算数", "国語", "算数"], "3校時 (10:45-11:30)": ["社会", "理科", "外国語", "算数", "理科"], "4校時 (11:40-12:25)": ["理科", "社会", "国語", "外国語", "社会"], "5校時 (13:30-14:15)": ["体育", "音楽", "図工", "体育", "総合"] };
+    const timeSlots = { "1校時": { start: "08:45", end: "09:30" }, "2校時": { start: "09:40", end: "10:25" }, "3校時": { start: "10:45", end: "11:30" }, "4校時": { start: "11:40", end: "12:25" }, "給食": { start: "12:25", end: "13:30" }, "5校時": { start: "13:30", end: "14:15" } };
+    
+    function updateClock() { const now = new Date(); const timeString = now.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }) + ' ' + now.toLocaleTimeString('ja-JP'); document.getElementById('current-time').textContent = timeString; }
+    
+    function updateSubjectAndLesson() { 
+        const now = new Date(); 
+        const dayOfWeek = now.getDay(); 
+        const currentTime = now.toTimeString().substring(0, 5); 
+        let currentSubject = "放課後"; 
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) { 
+            for (const period in timeSlots) { 
+                if (currentTime >= timeSlots[period].start && currentTime < timeSlots[period].end) { 
+                    if (period.includes('校時')) { 
+                        const periodKey = Object.keys(timetable).find(k => k.startsWith(period)); 
+                        currentSubject = timetable[periodKey][dayOfWeek - 1]; 
+                    } else { 
+                        currentSubject = "給食の時間"; 
+                    } 
+                    break; 
+                } 
+            } 
+        } else { 
+            currentSubject = "お休み"; 
+        } 
+        document.getElementById('current-subject-display').textContent = currentSubject; 
+        
+        if (currentSubject !== lastKnownSubject && !["休憩時間", "放課後", "お休み", "給食の時間"].includes(currentSubject)) {
+            startLesson(currentSubject);
+            lastKnownSubject = currentSubject;
+        } else if (currentSubject !== lastKnownSubject) {
+            banshoArea.innerHTML = `<p style="text-align:center; padding-top:150px; font-size:1.5em;">${currentSubject}です。</p>`;
+            slideControls.style.display = 'none';
+            lastKnownSubject = currentSubject;
+        }
+        updateTimetableHighlight(dayOfWeek, currentTime);
+    }
+
+    function updateTimetableHighlight(day, time) { document.querySelectorAll('.timetable .current').forEach(cell => cell.classList.remove('current')); if (day >= 1 && day <= 5) { let rowIndex = -1; Object.keys(timeSlots).forEach((period) => { const slot = timeSlots[period]; if (time >= slot.start && time < slot.end && period.includes('校時')) { const periodKey = Object.keys(timetable).find(k => k.startsWith(period)); rowIndex = Object.keys(timetable).indexOf(periodKey); } }); if (rowIndex !== -1) { timetableBody.rows[rowIndex].cells[day].classList.add('current'); } } }
+    
+    async function startLesson(subject) {
+        banshoArea.innerHTML = `<h2>${subject}の授業を始めます！</h2><p>今日の授業内容を考えています...</p>`;
+        slideControls.style.display = 'none';
+        slides = [];
+        const response = await fetch('/start_lesson', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ subject: subject })
+        });
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            fullText += decoder.decode(value, { stream: true });
+        }
+        setupSlides(fullText);
+    }
+    
+    function setupSlides(text) {
+        slides = text.split('---SLIDE_BREAK---').map(s => s.trim()).filter(s => s);
+        if (slides.length > 0) {
+            currentSlide = 0;
+            renderSlide();
+            slideControls.style.display = 'block';
+        } else {
+            banshoArea.innerHTML = '<p>スライドの生成に失敗しました。</p>';
+        }
+    }
+
+    function renderSlide() { if (slides.length === 0) return; banshoArea.innerHTML = marked.parse(slides[currentSlide]); slideInfo.textContent = `${currentSlide + 1} / ${slides.length}`; prevSlideBtn.disabled = (currentSlide === 0); nextSlideBtn.disabled = (currentSlide === slides.length - 1); }
+    
+    async function sendQuestion() { const question = questionInput.value; if (!question) return; appendMessage(question, 'user-message'); questionInput.value = ''; const modelMessageDiv = appendMessage('', 'model-message'); const currentSlideContent = slides.length > 0 ? slides[currentSlide] : ''; const response = await fetch('/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: question, context: currentSlideContent }) }); const reader = response.body.getReader(); const decoder = new TextDecoder(); let sentenceBuffer = ''; while (true) { const { value, done } = await reader.read(); if (done) { if (currentMode === 'voice') { speak(sentenceBuffer); } break; } const textChunk = decoder.decode(value, { stream: true }); modelMessageDiv.textContent += textChunk; chatLog.scrollTop = chatLog.scrollHeight; sentenceBuffer += textChunk; const sentenceEnd = sentenceBuffer.match(/[。？！]/); if (sentenceEnd) { const sentence = sentenceBuffer.substring(0, sentenceEnd.index + 1); if (currentMode === 'voice') { speak(sentence); } sentenceBuffer = sentenceBuffer.substring(sentenceEnd.index + 1); } } }
+    
+    function speak(text) { if ('speechSynthesis' in window && text) { const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'ja-JP'; window.speechSynthesis.speak(utterance); } }
+    
+    function appendMessage(text, className) { const messageDiv = document.createElement('div'); messageDiv.classList.add('message', className); messageDiv.textContent = text; chatLog.appendChild(messageDiv); chatLog.scrollTop = chatLog.scrollHeight; return messageDiv; }
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (SpeechRecognition) { const recognition = new SpeechRecognition(); recognition.lang = 'ja-JP'; recognition.interimResults = false; recognition.continuous = false; micButton.addEventListener('click', () => { if (currentMode !== 'voice') return; if (micButton.classList.contains('is-recording')) { recognition.stop(); } else { recognition.start(); } }); recognition.onstart = () => { micButton.classList.add('is-recording'); micButton.textContent = '…'; }; recognition.onend = () => { micButton.classList.remove('is-recording'); micButton.textContent = '🎙️'; }; recognition.onresult = (event) => { questionInput.value = event.results[0][0].transcript; sendQuestion(); }; recognition.onerror = (event) => { console.error('音声認識エラー:', event.error); alert('音声認識中にエラーが発生しました。'); }; } else { micButton.style.display = 'none'; }
+    
+    questionInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') { sendQuestion(); } });
+    
+    prevSlideBtn.addEventListener('click', () => { if (currentSlide > 0) { currentSlide--; renderSlide(); } });
+    
+    nextSlideBtn.addEventListener('click', () => { if (currentSlide < slides.length - 1) { currentSlide++; renderSlide(); } });
+    
+    const modeSelectors = document.querySelectorAll('input[name="chat-mode"]'); modeSelectors.forEach(selector => { selector.addEventListener('change', (event) => { currentMode = event.target.value; micButton.disabled = (currentMode === 'text'); }); });
+    
+    document.addEventListener('DOMContentLoaded', () => { Object.keys(timetable).forEach(period => { const row = timetableBody.insertRow(); row.insertCell().textContent = period; timetable[period].forEach(subject => { row.insertCell().textContent = subject; }); }); updateClock(); updateSubjectAndLesson(); setInterval(updateClock, 1000); setInterval(updateSubjectAndLesson, 10000); micButton.disabled = true; });
+</script>
+
+</body>
+</html>

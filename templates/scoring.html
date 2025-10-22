@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>AI先生 テスト採点</title>
+    <style>
+        body { font-family: 'UD デジタル 教科書体 N-B', sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #f0f2f5; }
+        h1, h2 { text-align: center; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        textarea { width: 98%; height: 100px; padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 1em; margin-bottom: 10px; }
+        .image-upload-section { margin-bottom: 15px; border: 1px dashed #ccc; padding: 15px; border-radius: 5px; text-align: center; }
+        .image-upload-section input[type="file"] { display: none; }
+        .image-upload-section label { background-color: #007bff; color: white; padding: 10px 15px; border-radius: 5px; cursor: pointer; display: inline-block; margin-bottom: 10px; }
+        .image-upload-section label:hover { background-color: #0056b3; }
+        /* ★★★ 模範解答用の色分け ★★★ */
+        .image-upload-section.model-answer label { background-color: #17a2b8; }
+        .image-upload-section.model-answer label:hover { background-color: #117a8b; }
+        img.preview { max-width: 100%; max-height: 200px; object-fit: contain; margin-top: 10px; border: 1px solid #eee; display: none;}
+        button { display: block; width: 100%; padding: 15px; border: none; background-color: #28a745; color: white; font-size: 1.2em; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #218838; }
+        button:disabled { background-color: #ccc; }
+        #result-area { margin-top: 20px; background-color: #f8f9fa; padding: 20px; border-radius: 8px; white-space: pre-wrap; line-height: 1.6; }
+        .home-link { display: block; text-align: center; margin-top: 20px; text-decoration: none; color: #007bff; font-weight: bold;}
+        
+        /* ★★★ 採点後チャット用のスタイル ★★★ */
+        #scoring-chat-area { display: none; margin-top: 20px; }
+        #scoring-chat-log { height: 200px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; background-color: #f9f9f9; border-radius: 5px; margin-bottom: 10px; }
+        #scoring-chat-area .message { margin-bottom: 10px; padding: 8px 12px; border-radius: 15px; max-width: 80%; }
+        #scoring-chat-area .user-message { background-color: #dcf8c6; margin-left: auto; }
+        #scoring-chat-area .model-message { background-color: #f1f0f0; white-space: pre-wrap; word-wrap: break-word; }
+        #scoring-input-area { display: flex; }
+        #scoring-question { flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        #send-scoring-question-btn { width: auto; font-size: 1em; margin-left: 10px; background-color: #007bff; }
+    </style>
+</head>
+<body>
+    <h1>📝 AI先生 テスト採点</h1>
+    <div class="container">
+        <h2>1. 生徒のテスト画像 (必須)</h2>
+        <div class="image-upload-section">
+            <input type="file" id="student-test-image" accept="image/jpeg, image/png, image/gif">
+            <label for="student-test-image">生徒のテスト画像をアップロード</label>
+            <p>※問題と生徒の答えが書かれたテスト用紙の画像をアップロードしてください。</p>
+            <img id="student-image-preview" class="preview" src="#" alt="生徒の画像プレビュー">
+        </div>
+
+        <h2>2. 模範解答の画像 (任意)</h2>
+        <div class="image-upload-section model-answer">
+            <input type="file" id="model-answer-image" accept="image/jpeg, image/png, image/gif">
+            <label for="model-answer-image">模範解答の画像をアップロード</label>
+            <p>※任意です。AIがこれを正解として採点します。</p>
+            <img id="model-answer-preview" class="preview" src="#" alt="模範解答のプレビュー">
+        </div>
+
+        <h2>3. 補足情報（任意）</h2>
+        <textarea id="test-questions-text" placeholder="画像が不鮮明な場合など、補足したい問題文があれば入力してください。"></textarea>
+        <textarea id="student-answers" placeholder="画像内の文字が読み取りにくい場合など、生徒の答えを補足したい場合はここに入力してください。"></textarea>
+        
+        <button id="score-button" onclick="scoreTest()">採点を開始する</button>
+
+        <div id="result-area" style="display:none;">
+            <h2>採点結果</h2>
+            <p id="scoring-result">採点中...</p>
+        </div>
+    </div>
+    
+    <div class="container" id="scoring-chat-area">
+        <h2>採点について質問する</h2>
+        <div id="scoring-chat-log"></div>
+        <div id="scoring-input-area">
+            <input type="text" id="scoring-question" placeholder="例：どうして2番はまちがいなの？">
+            <button id="send-scoring-question-btn" onclick="sendScoringQuestion()">送信</button>
+        </div>
+    </div>
+    <a href="/" class="home-link">ダッシュボードに戻る</a>
+
+<script>
+    let studentImageDataUrl = null;
+    let modelAnswerImageDataUrl = null;
+    let lastGradingResult = ""; // AIの採点結果を保存する変数
+
+    // 生徒のテスト画像用
+    document.getElementById('student-test-image').addEventListener('change', function(event) {
+        handleFileSelect(event, 'student-image-preview', (dataUrl) => {
+            studentImageDataUrl = dataUrl;
+        });
+    });
+
+    // 模範解答の画像用
+    document.getElementById('model-answer-image').addEventListener('change', function(event) {
+        handleFileSelect(event, 'model-answer-preview', (dataUrl) => {
+            modelAnswerImageDataUrl = dataUrl;
+        });
+    });
+
+    // 共通のファイル読み込み関数
+    function handleFileSelect(event, previewId, callback) {
+        const file = event.target.files[0];
+        const preview = document.getElementById(previewId);
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                callback(e.target.result); // Data URLを保存
+            };
+            reader.readAsDataURL(file);
+        } else {
+            preview.style.display = 'none';
+            callback(null);
+        }
+    }
+
+    async function scoreTest() {
+        const questionsText = document.getElementById('test-questions-text').value;
+        const studentAnswers = document.getElementById('student-answers').value;
+        const resultArea = document.getElementById('result-area');
+        const resultP = document.getElementById('scoring-result');
+        const scoreButton = document.getElementById('score-button');
+
+        if (!studentImageDataUrl) {
+            alert('採点するには、必ず「生徒のテスト画像」をアップロードしてください。');
+            return;
+        }
+
+        resultArea.style.display = 'block';
+        resultP.textContent = 'AI先生が画像を読み取って採点中です...';
+        scoreButton.disabled = true;
+        scoreButton.textContent = '採点中...';
+        lastGradingResult = ""; // 採点結果をリセット
+
+        const response = await fetch('/score_test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                questions_text: questionsText,
+                student_image_url: studentImageDataUrl,
+                model_answer_image_url: modelAnswerImageDataUrl,
+                answers: studentAnswers 
+            })
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        resultP.textContent = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const textChunk = decoder.decode(value, { stream: true });
+            lastGradingResult += textChunk; // 採点結果を全文保存
+            resultP.textContent = lastGradingResult; // リアルタイムで表示
+        }
+
+        scoreButton.disabled = false;
+        scoreButton.textContent = '採点を開始する';
+        document.getElementById('scoring-chat-area').style.display = 'block'; // チャット欄を表示
+    }
+
+    // ★★★ 新しい機能：採点について質問する関数 ★★★
+    async function sendScoringQuestion() {
+        const questionInput = document.getElementById('scoring-question');
+        const chatLog = document.getElementById('scoring-chat-log');
+        const question = questionInput.value;
+        if (!question.trim()) return;
+
+        appendScoringMessage(question, 'user-message');
+        questionInput.value = '';
+
+        const modelMessageDiv = appendScoringMessage('考え中...', 'model-message');
+
+        const response = await fetch('/ask_scoring', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                question: question,
+                context: lastGradingResult // AIの採点結果を文脈として送る
+            })
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        modelMessageDiv.textContent = ''; // 「考え中...」をクリア
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const textChunk = decoder.decode(value, { stream: true });
+            modelMessageDiv.textContent += textChunk;
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+    }
+
+    function appendScoringMessage(text, className) {
+        const chatLog = document.getElementById('scoring-chat-log');
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('message', className);
+        messageDiv.textContent = text;
+        chatLog.appendChild(messageDiv);
+        chatLog.scrollTop = chatLog.scrollHeight;
+        return messageDiv;
+    }
+</script>
+</body>
+</html>
