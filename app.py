@@ -6,6 +6,7 @@ import base64
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
+
 app = Flask(__name__)
 
 # APIキーを設定
@@ -14,8 +15,10 @@ try:
 except KeyError:
     print("エラー: GOOGLE_API_KEYが環境変数に設定されていません。")
 
-# あなたの環境で動作したモデル名を設定してください (例: 'gemini-2.5-pro')
-model = genai.GenerativeModel('gemini-2.5-pro')
+# あなたの環境で動作したモデル名を設定してください (例: 'gemini-1.5-pro')
+# === 【重要】モデル名を 'gemini-2.5-flash-lite' に変更 ===
+model = genai.GenerativeModel('gemini-2.5-flash-lite')
+# === 修正ここまで ===
 
 # --- 1. ページ表示用のルート ---
 
@@ -37,6 +40,7 @@ def start_lesson():
     data = request.json
     subject = data['subject']
     
+    # 毎回新しい授業を考えさせるプロンプト
     prompt = f"""
     あなたは、日本の小学校5年生の担任で、授業計画を立てるのが得意なAI先生です。
     今から「{subject}」の授業を始めます。
@@ -63,7 +67,6 @@ def start_lesson():
         except Exception as e:
             yield f"エラーが発生しました: {e}"
     return Response(generate_responses(), mimetype='text/plain')
-
 
 @app.route('/ask', methods=['POST'])
 def ask():
@@ -104,17 +107,14 @@ def ask():
             yield f"エラーが発生しました: {e}"
     return Response(generate_responses(), mimetype='text/plain')
 
-
 @app.route('/score_test', methods=['POST'])
 def score_test():
     """テキストと画像のテスト問題を採点します。模範解答の画像も利用します。"""
     data = request.json
     questions_text = data.get('questions_text', '')
     student_answers = data.get('answers', '')
-    
-    # --- ★★★ ここからが変更点 ★★★ ---
     student_image_url = data.get('student_image_url', None)
-    model_answer_image_url = data.get('model_answer_image_url', None) # 模範解答の画像を受け取る
+    model_answer_image_url = data.get('model_answer_image_url', None)
     
     prompt_text = """
     あなたは、日本の小学校5年生のテストを採点する、AIの先生です。
@@ -133,7 +133,6 @@ def score_test():
     
     contents = [prompt_text]
 
-    # 1. 生徒のテスト画像
     if student_image_url:
         header, encoded = student_image_url.split(",", 1)
         image_bytes = base64.b64decode(encoded)
@@ -142,7 +141,6 @@ def score_test():
         contents.append("【生徒のテスト画像】")
         contents.append(image_part)
 
-    # 2. 模範解答の画像
     if model_answer_image_url:
         header, encoded = model_answer_image_url.split(",", 1)
         image_bytes = base64.b64decode(encoded)
@@ -151,25 +149,28 @@ def score_test():
         contents.append("【模範解答の画像】（これを正解として採点してください）")
         contents.append(image_part)
         
-    # 3. 補足テキスト
     if questions_text:
         contents.append(f"問題文(補足テキスト):\n{questions_text}")
     if student_answers:
         contents.append(f"生徒の答え(補足テキスト):\n{student_answers}")
-    # --- ★★★ 変更点はここまで ★★★ ---
 
-    def generate_responses():
-        try:
-            response_stream = model.generate_content(contents, stream=True)
-            for chunk in response_stream:
-                if chunk.text:
-                    yield chunk.text
-        except Exception as e:
-            yield f"エラーが発生しました: {e}"
+    # === 【重要】バグ修正: ストリーミングをやめて完全なレスポンスを待つ ===
+    try:
+        # stream=True を削除し、AIが回答をすべて生成するのを待つ
+        response = model.generate_content(contents) 
+        
+        # モデルが何らかの理由で応答をブロックした場合の安全策
+        if not response.parts:
+            return jsonify({"error": "AIからの応答がありませんでした。"}), 500
+        
+        # 完全なテキストをJSON形式で返す
+        return jsonify({"full_text": response.text})
 
-    return Response(generate_responses(), mimetype='text/plain')
+    except Exception as e:
+        print(f"採点エラー: {e}") # サーバーログに詳細を出力
+        return jsonify({"error": f"採点中にエラーが発生しました: {e}"}), 500
+    # === 修正ここまで ===
 
-# --- ★★★ 新しい機能：採点について質問するルート ★★★ ---
 @app.route('/ask_scoring', methods=['POST'])
 def ask_scoring():
     """採点結果についての質問に答えます。"""
@@ -200,7 +201,6 @@ def ask_scoring():
         except Exception as e:
             yield f"エラーが発生しました: {e}"
     return Response(generate_responses(), mimetype='text/plain')
-# --- ★★★ 新機能はここまで ★★★ ---
 
 # --- 3. アプリケーションの実行 ---
 if __name__ == '__main__':

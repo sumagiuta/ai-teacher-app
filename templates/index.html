@@ -2,13 +2,14 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI先生 ダッシュボード</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { font-family: 'UD デジタル 教科書体 N-B', sans-serif; max-width: 1000px; margin: auto; padding: 20px; background-color: #f0f2f5; }
-        .container { display: flex; gap: 20px; }
-        .main-content { flex: 3; }
-        .side-content { flex: 2; }
+        body { font-family: 'UD デジタル 教科書体 N-B', sans-serif; max-width: 1000px; margin: auto; padding: 20px; background-color: #f0f2f5; box-sizing: border-box; }
+        .container { display: flex; gap: 20px; flex-wrap: wrap; }
+        .main-content { flex: 3; min-width: 300px; }
+        .side-content { flex: 2; min-width: 300px; }
         h1, h2, h3 { margin-top: 0; }
         #bansho-container { position: relative; }
         #bansho-area { background-color: #006633; color: white; border: 10px solid #8b4513; border-radius: 10px; padding: 20px; min-height: 400px; white-space: pre-wrap; font-size: 1.1em; line-height: 1.6; }
@@ -42,6 +43,33 @@
         button { padding: 10px 15px; border: none; background-color: #007bff; color: white; border-radius: 5px; cursor: pointer; margin-left: 10px; }
         button#mic-button:disabled { background-color: #ccc; cursor: not-allowed; }
         button#mic-button.is-recording { background-color: #dc3545; }
+        
+        /* トークン節約: 授業開始ボタンのスタイル */
+        #start-lesson-btn { 
+            width: 100%; 
+            padding: 15px; 
+            font-size: 1.2em; 
+            font-weight: bold;
+            background-color: #007bff; 
+            color: white; 
+            border: none;
+            border-radius: 8px; 
+            cursor: pointer; 
+            margin-bottom: 20px;
+            margin-left: 0; /* 他のbuttonタグのスタイルを上書き */
+        }
+        #start-lesson-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        /* レスポンシブ対応: メディアクエリ */
+        @media (max-width: 768px) {
+            .container { flex-direction: column; }
+            body { padding: 10px; }
+            h1 { font-size: 1.5em; }
+            #bansho-area { min-height: 300px; padding: 15px; }
+            .timetable th, .timetable td { padding: 5px; font-size: 0.9em; }
+            #slide-controls button { padding: 8px 12px; margin: 0 5px; }
+        }
+
     </style>
 </head>
 <body>
@@ -49,6 +77,9 @@
     <div class="container">
         <div class="main-content">
             <h2>今日の授業</h2>
+            
+            <button id="start-lesson-btn" disabled>時間割を読み込み中...</button>
+            
             <div id="bansho-container">
                 <div id="bansho-area"><p>次の授業が始まるのを待っています...</p></div>
                 <div id="slide-controls" style="display:none;">
@@ -88,7 +119,6 @@
             </div>
         </div>
     </div>
-
 <script>
     const chatLog = document.getElementById('chat-log');
     const questionInput = document.getElementById('question');
@@ -99,6 +129,8 @@
     const prevSlideBtn = document.getElementById('prev-slide-btn');
     const nextSlideBtn = document.getElementById('next-slide-btn');
     const slideInfo = document.getElementById('slide-info');
+    const startLessonBtn = document.getElementById('start-lesson-btn'); // 授業開始ボタンを取得
+    
     let lastKnownSubject = null;
     let currentMode = 'text';
     let slides = [];
@@ -109,11 +141,13 @@
     
     function updateClock() { const now = new Date(); const timeString = now.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }) + ' ' + now.toLocaleTimeString('ja-JP'); document.getElementById('current-time').textContent = timeString; }
     
+    // === 【重要】トークン節約: updateSubjectAndLesson関数を修正 ===
     function updateSubjectAndLesson() { 
         const now = new Date(); 
         const dayOfWeek = now.getDay(); 
         const currentTime = now.toTimeString().substring(0, 5); 
         let currentSubject = "放課後"; 
+        
         if (dayOfWeek >= 1 && dayOfWeek <= 5) { 
             for (const period in timeSlots) { 
                 if (currentTime >= timeSlots[period].start && currentTime < timeSlots[period].end) { 
@@ -129,22 +163,39 @@
         } else { 
             currentSubject = "お休み"; 
         } 
+        
         document.getElementById('current-subject-display').textContent = currentSubject; 
         
-        if (currentSubject !== lastKnownSubject && !["休憩時間", "放課後", "お休み", "給食の時間"].includes(currentSubject)) {
-            startLesson(currentSubject);
-            lastKnownSubject = currentSubject;
-        } else if (currentSubject !== lastKnownSubject) {
-            banshoArea.innerHTML = `<p style="text-align:center; padding-top:150px; font-size:1.5em;">${currentSubject}です。</p>`;
-            slideControls.style.display = 'none';
+        // 授業が自動で開始しないように、startLesson()の呼び出しを削除
+        
+        // 教科が変わった時の処理
+        if (currentSubject !== lastKnownSubject) {
+            // 授業時間の場合
+            if (!["休憩時間", "放課後", "お休み", "給食の時間"].includes(currentSubject)) {
+                startLessonBtn.disabled = false;
+                startLessonBtn.textContent = `${currentSubject}の授業をはじめる`;
+                banshoArea.innerHTML = `<p>${currentSubject}の時間です。ボタンを押して授業を始めましょう。</p>`;
+                slideControls.style.display = 'none';
+            } 
+            // 授業時間外の場合
+            else {
+                startLessonBtn.disabled = true;
+                startLessonBtn.textContent = '授業はありません';
+                banshoArea.innerHTML = `<p style="text-align:center; padding-top:150px; font-size:1.5em;">${currentSubject}です。</p>`;
+                slideControls.style.display = 'none';
+            }
             lastKnownSubject = currentSubject;
         }
+        
         updateTimetableHighlight(dayOfWeek, currentTime);
     }
+    // === 修正ここまで ===
 
     function updateTimetableHighlight(day, time) { document.querySelectorAll('.timetable .current').forEach(cell => cell.classList.remove('current')); if (day >= 1 && day <= 5) { let rowIndex = -1; Object.keys(timeSlots).forEach((period) => { const slot = timeSlots[period]; if (time >= slot.start && time < slot.end && period.includes('校時')) { const periodKey = Object.keys(timetable).find(k => k.startsWith(period)); rowIndex = Object.keys(timetable).indexOf(periodKey); } }); if (rowIndex !== -1) { timetableBody.rows[rowIndex].cells[day].classList.add('current'); } } }
     
     async function startLesson(subject) {
+        startLessonBtn.disabled = true; // 授業が始まったらボタンを無効化
+        startLessonBtn.textContent = '授業を準備中...';
         banshoArea.innerHTML = `<h2>${subject}の授業を始めます！</h2><p>今日の授業内容を考えています...</p>`;
         slideControls.style.display = 'none';
         slides = [];
@@ -183,7 +234,17 @@
     
     function appendMessage(text, className) { const messageDiv = document.createElement('div'); messageDiv.classList.add('message', className); messageDiv.textContent = text; chatLog.appendChild(messageDiv); chatLog.scrollTop = chatLog.scrollHeight; return messageDiv; }
     
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (SpeechRecognition) { const recognition = new SpeechRecognition(); recognition.lang = 'ja-JP'; recognition.interimResults = false; recognition.continuous = false; micButton.addEventListener('click', () => { if (currentMode !== 'voice') return; if (micButton.classList.contains('is-recording')) { recognition.stop(); } else { recognition.start(); } }); recognition.onstart = () => { micButton.classList.add('is-recording'); micButton.textContent = '…'; }; recognition.onend = () => { micButton.classList.remove('is-recording'); micButton.textContent = '🎙️'; }; recognition.onresult = (event) => { questionInput.value = event.results[0][0].transcript; sendQuestion(); }; recognition.onerror = (event) => { console.error('音声認識エラー:', event.error); alert('音声認識中にエラーが発生しました。'); }; } else { micButton.style.display = 'none'; }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; 
+    
+    // === 【重要】バグ修正: 'SpeechSppechRecognition' -> 'SpeechRecognition' に修正 ===
+    if (SpeechRecognition) { 
+        const recognition = new SpeechRecognition(); 
+    // === 修正ここまで ===
+        
+        recognition.lang = 'ja-JP'; 
+        recognition.interimResults = false; 
+        recognition.continuous = false; 
+        micButton.addEventListener('click', () => { if (currentMode !== 'voice') return; if (micButton.classList.contains('is-recording')) { recognition.stop(); } else { recognition.start(); } }); recognition.onstart = () => { micButton.classList.add('is-recording'); micButton.textContent = '…'; }; recognition.onend = () => { micButton.classList.remove('is-recording'); micButton.textContent = '🎙️'; }; recognition.onresult = (event) => { questionInput.value = event.results[0][0].transcript; sendQuestion(); }; recognition.onerror = (event) => { console.error('音声認識エラー:', event.error); alert('音声認識中にエラーが発生しました。'); }; } else { micButton.style.display = 'none'; }
     
     questionInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') { sendQuestion(); } });
     
@@ -193,8 +254,23 @@
     
     const modeSelectors = document.querySelectorAll('input[name="chat-mode"]'); modeSelectors.forEach(selector => { selector.addEventListener('change', (event) => { currentMode = event.target.value; micButton.disabled = (currentMode === 'text'); }); });
     
-    document.addEventListener('DOMContentLoaded', () => { Object.keys(timetable).forEach(period => { const row = timetableBody.insertRow(); row.insertCell().textContent = period; timetable[period].forEach(subject => { row.insertCell().textContent = subject; }); }); updateClock(); updateSubjectAndLesson(); setInterval(updateClock, 1000); setInterval(updateSubjectAndLesson, 10000); micButton.disabled = true; });
-</script>
+    document.addEventListener('DOMContentLoaded', () => { 
+        Object.keys(timetable).forEach(period => { const row = timetableBody.insertRow(); row.insertCell().textContent = period; timetable[period].forEach(subject => { row.insertCell().textContent = subject; }); }); 
+        
+        // トークン節約: 授業開始ボタンのクリックイベント
+        startLessonBtn.addEventListener('click', () => {
+            const subject = document.getElementById('current-subject-display').textContent;
+            if (subject && !["休憩時間", "放課後", "お休み", "給食の時間"].includes(subject)) {
+                startLesson(subject);
+            }
+        });
 
+        updateClock(); 
+        updateSubjectAndLesson(); 
+        setInterval(updateClock, 1000); 
+        setInterval(updateSubjectAndLesson, 10000); 
+        micButton.disabled = true; 
+    });
+</script>
 </body>
 </html>

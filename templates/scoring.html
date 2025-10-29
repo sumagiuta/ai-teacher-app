@@ -2,17 +2,27 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI先生 テスト採点</title>
     <style>
-        body { font-family: 'UD デジタル 教科書体 N-B', sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #f0f2f5; }
+        body { font-family: 'UD デジタル 教科書体 N-B', sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #f0f2f5; box-sizing: border-box; }
         h1, h2 { text-align: center; color: #333; }
         .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        textarea { width: 98%; height: 100px; padding: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 1em; margin-bottom: 10px; }
+        /* レスポンシブ対応: box-sizingを追加し、widthを100%に */
+        textarea { 
+            width: 100%; 
+            height: 100px; 
+            padding: 10px; 
+            border-radius: 5px; 
+            border: 1px solid #ccc; 
+            font-size: 1em; 
+            margin-bottom: 10px; 
+            box-sizing: border-box; /* 追加 */
+        }
         .image-upload-section { margin-bottom: 15px; border: 1px dashed #ccc; padding: 15px; border-radius: 5px; text-align: center; }
         .image-upload-section input[type="file"] { display: none; }
         .image-upload-section label { background-color: #007bff; color: white; padding: 10px 15px; border-radius: 5px; cursor: pointer; display: inline-block; margin-bottom: 10px; }
         .image-upload-section label:hover { background-color: #0056b3; }
-        /* ★★★ 模範解答用の色分け ★★★ */
         .image-upload-section.model-answer label { background-color: #17a2b8; }
         .image-upload-section.model-answer label:hover { background-color: #117a8b; }
         img.preview { max-width: 100%; max-height: 200px; object-fit: contain; margin-top: 10px; border: 1px solid #eee; display: none;}
@@ -22,7 +32,6 @@
         #result-area { margin-top: 20px; background-color: #f8f9fa; padding: 20px; border-radius: 8px; white-space: pre-wrap; line-height: 1.6; }
         .home-link { display: block; text-align: center; margin-top: 20px; text-decoration: none; color: #007bff; font-weight: bold;}
         
-        /* ★★★ 採点後チャット用のスタイル ★★★ */
         #scoring-chat-area { display: none; margin-top: 20px; }
         #scoring-chat-log { height: 200px; border: 1px solid #ccc; overflow-y: scroll; padding: 10px; background-color: #f9f9f9; border-radius: 5px; margin-bottom: 10px; }
         #scoring-chat-area .message { margin-bottom: 10px; padding: 8px 12px; border-radius: 15px; max-width: 80%; }
@@ -31,6 +40,17 @@
         #scoring-input-area { display: flex; }
         #scoring-question { flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
         #send-scoring-question-btn { width: auto; font-size: 1em; margin-left: 10px; background-color: #007bff; }
+
+        /* レスポンシブ対応: メディアクエリ */
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            h1 { font-size: 1.5em; }
+            .container { padding: 15px; }
+            button { padding: 12px; }
+            .image-upload-section p { font-size: 0.9em; }
+            .image-upload-section label { padding: 8px 12px; }
+            #scoring-question { padding: 8px; }
+        }
     </style>
 </head>
 <body>
@@ -44,7 +64,7 @@
             <img id="student-image-preview" class="preview" src="#" alt="生徒の画像プレビュー">
         </div>
 
-        <h2>2. 模範解答の画像 (任意)</h2>
+        <h2>2. L模範解答の画像 (任意)</h2>
         <div class="image-upload-section model-answer">
             <input type="file" id="model-answer-image" accept="image/jpeg, image/png, image/gif">
             <label for="model-answer-image">模範解答の画像をアップロード</label>
@@ -72,28 +92,25 @@
             <button id="send-scoring-question-btn" onclick="sendScoringQuestion()">送信</button>
         </div>
     </div>
-    <a href="/" class="home-link">ダッシュボードに戻る</a>
 
+    <a href="/" class="home-link">ダッシュボードに戻る</a>
 <script>
     let studentImageDataUrl = null;
     let modelAnswerImageDataUrl = null;
     let lastGradingResult = ""; // AIの採点結果を保存する変数
 
-    // 生徒のテスト画像用
     document.getElementById('student-test-image').addEventListener('change', function(event) {
         handleFileSelect(event, 'student-image-preview', (dataUrl) => {
             studentImageDataUrl = dataUrl;
         });
     });
 
-    // 模範解答の画像用
     document.getElementById('model-answer-image').addEventListener('change', function(event) {
         handleFileSelect(event, 'model-answer-preview', (dataUrl) => {
             modelAnswerImageDataUrl = dataUrl;
         });
     });
 
-    // 共通のファイル読み込み関数
     function handleFileSelect(event, previewId, callback) {
         const file = event.target.files[0];
         const preview = document.getElementById(previewId);
@@ -102,7 +119,7 @@
             reader.onload = function(e) {
                 preview.src = e.target.result;
                 preview.style.display = 'block';
-                callback(e.target.result); // Data URLを保存
+                callback(e.target.result);
             };
             reader.readAsDataURL(file);
         } else {
@@ -111,6 +128,7 @@
         }
     }
 
+    // === 【重要】バグ修正: scoreTest関数をJSONレスポンス用に変更 ===
     async function scoreTest() {
         const questionsText = document.getElementById('test-questions-text').value;
         const studentAnswers = document.getElementById('student-answers').value;
@@ -124,40 +142,52 @@
         }
 
         resultArea.style.display = 'block';
-        resultP.textContent = 'AI先生が画像を読み取って採点中です...';
+        resultP.textContent = 'AI先生が画像を読み取って採点中です...（少し時間がかかります）';
         scoreButton.disabled = true;
         scoreButton.textContent = '採点中...';
-        lastGradingResult = ""; // 採点結果をリセット
+        lastGradingResult = ""; 
+        document.getElementById('scoring-chat-area').style.display = 'none';
+        document.getElementById('scoring-chat-log').innerHTML = '';
 
-        const response = await fetch('/score_test', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                questions_text: questionsText,
-                student_image_url: studentImageDataUrl,
-                model_answer_image_url: modelAnswerImageDataUrl,
-                answers: studentAnswers 
-            })
-        });
+        try {
+            const response = await fetch('/score_test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    questions_text: questionsText,
+                    student_image_url: studentImageDataUrl,
+                    model_answer_image_url: modelAnswerImageDataUrl,
+                    answers: studentAnswers 
+                })
+            });
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        resultP.textContent = '';
+            // ストリーミングではなく、JSONとしてレスポンスをパース
+            const result = await response.json();
 
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            const textChunk = decoder.decode(value, { stream: true });
-            lastGradingResult += textChunk; // 採点結果を全文保存
-            resultP.textContent = lastGradingResult; // リアルタイムで表示
+            if (response.ok) {
+                // 成功した場合
+                lastGradingResult = result.full_text;
+                resultP.textContent = lastGradingResult;
+                document.getElementById('scoring-chat-area').style.display = 'block';
+            } else {
+                // サーバー側でエラーが発生した場合 (app.pyからjsonify({"error": ...}) が返された場合)
+                lastGradingResult = `エラー: ${result.error || '不明なエラー'}`;
+                resultP.textContent = lastGradingResult;
+            }
+
+        } catch (error) {
+            // ネットワークエラーなど、fetch自体が失敗した場合
+            console.error("Fetch error:", error);
+            lastGradingResult = "採点サーバーとの通信に失敗しました。";
+            resultP.textContent = lastGradingResult;
         }
 
+        // 読み込み中だったボタンを元に戻す
         scoreButton.disabled = false;
         scoreButton.textContent = '採点を開始する';
-        document.getElementById('scoring-chat-area').style.display = 'block'; // チャット欄を表示
     }
+    // === 修正ここまで ===
 
-    // ★★★ 新しい機能：採点について質問する関数 ★★★
     async function sendScoringQuestion() {
         const questionInput = document.getElementById('scoring-question');
         const chatLog = document.getElementById('scoring-chat-log');
@@ -174,13 +204,13 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 question: question,
-                context: lastGradingResult // AIの採点結果を文脈として送る
+                context: lastGradingResult // 採点結果の全テキストを文脈として渡す
             })
         });
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        modelMessageDiv.textContent = ''; // 「考え中...」をクリア
+        modelMessageDiv.textContent = '';
 
         while (true) {
             const { value, done } = await reader.read();
