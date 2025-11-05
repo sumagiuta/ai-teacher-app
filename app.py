@@ -17,7 +17,7 @@ except KeyError:
 
 # あなたの環境で動作したモデル名を設定してください (例: 'gemini-1.5-pro')
 # === 【重要】モデル名を 'gemini-2.5-flash-lite' に変更 ===
-model = genai.GenerativeModel('gemini-2.5-flash-lite')
+model = genai.GenerativeModel('gemini-2.5-pro')
 # === 修正ここまで ===
 
 # --- 1. ページ表示用のルート ---
