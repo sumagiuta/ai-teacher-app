@@ -15,10 +15,17 @@ try:
 except KeyError:
     print("エラー: GOOGLE_API_KEYが環境変数に設定されていません。")
 
-# あなたの環境で動作したモデル名を設定してください (例: 'gemini-1.5-pro')
-# === 【重要】モデル名を 'gemini-2.5-flash-lite' に変更 ===
-model = genai.GenerativeModel('gemini-2.5-pro')
-# === 修正ここまで ===
+# === 【重要】モデル設定（リストに基づき最新モデルを適用） ===
+
+# 1. 高性能モデル (Pro): 授業作成や採点など、高い思考能力が必要なタスク用
+# リストにあった 'gemini-3-pro-preview' を使用
+model_pro = genai.GenerativeModel('gemini-3-pro-preview') 
+
+# 2. 高速モデル (Flash): チャットなど、レスポンス速度が重要なタスク用
+# リストにあった 'gemini-3-flash-preview' を使用
+model_flash = genai.GenerativeModel('gemini-3-flash-preview')
+
+# ==========================================================
 
 # --- 1. ページ表示用のルート ---
 
@@ -37,10 +44,10 @@ def scoring():
 @app.route('/start_lesson', methods=['POST'])
 def start_lesson():
     """授業を開始し、スライド形式の板書を生成します。"""
+    # 【Proモデル使用】授業計画は創造性と構成力が必要なため
     data = request.json
     subject = data['subject']
     
-    # 毎回新しい授業を考えさせるプロンプト
     prompt = f"""
     あなたは、日本の小学校5年生の担任で、授業計画を立てるのが得意なAI先生です。
     今から「{subject}」の授業を始めます。
@@ -60,7 +67,8 @@ def start_lesson():
     
     def generate_responses():
         try:
-            response_stream = model.generate_content(prompt, stream=True)
+            # Proモデルを使用
+            response_stream = model_pro.generate_content(prompt, stream=True)
             for chunk in response_stream:
                 if chunk.text:
                     yield chunk.text
@@ -71,9 +79,10 @@ def start_lesson():
 @app.route('/ask', methods=['POST'])
 def ask():
     """授業の文脈に基づいた生徒からの質問に答えます。"""
+    # 【Flashモデル使用】生徒を待たせないレスポンス速度が重要なため
     data = request.json
     user_question = data['question']
-    lesson_context = data.get('context', '') # 現在のスライド内容を受け取る
+    lesson_context = data.get('context', '')
     
     prompt = f"""
     あなたは、日本の小学校高学年の児童に教えるのが非常に得意なAI先生です。
@@ -99,7 +108,8 @@ def ask():
     
     def generate_responses():
         try:
-            response_stream = model.generate_content(prompt, stream=True)
+            # Flashモデルを使用
+            response_stream = model_flash.generate_content(prompt, stream=True)
             for chunk in response_stream:
                 if chunk.text:
                     yield chunk.text
@@ -109,7 +119,8 @@ def ask():
 
 @app.route('/score_test', methods=['POST'])
 def score_test():
-    """テキストと画像のテスト問題を採点します。模範解答の画像も利用します。"""
+    """テキストと画像のテスト問題を採点します。"""
+    # 【Proモデル使用】手書き文字の認識や、正誤判定の論理的思考が必要なため
     data = request.json
     questions_text = data.get('questions_text', '')
     student_answers = data.get('answers', '')
@@ -154,29 +165,26 @@ def score_test():
     if student_answers:
         contents.append(f"生徒の答え(補足テキスト):\n{student_answers}")
 
-    # === 【重要】バグ修正: ストリーミングをやめて完全なレスポンスを待つ ===
     try:
-        # stream=True を削除し、AIが回答をすべて生成するのを待つ
-        response = model.generate_content(contents) 
+        # Proモデルを使用（応答待ち）
+        response = model_pro.generate_content(contents) 
         
-        # モデルが何らかの理由で応答をブロックした場合の安全策
         if not response.parts:
             return jsonify({"error": "AIからの応答がありませんでした。"}), 500
         
-        # 完全なテキストをJSON形式で返す
         return jsonify({"full_text": response.text})
 
     except Exception as e:
-        print(f"採点エラー: {e}") # サーバーログに詳細を出力
+        print(f"採点エラー: {e}")
         return jsonify({"error": f"採点中にエラーが発生しました: {e}"}), 500
-    # === 修正ここまで ===
 
 @app.route('/ask_scoring', methods=['POST'])
 def ask_scoring():
     """採点結果についての質問に答えます。"""
+    # 【Flashモデル使用】会話のテンポを重視するため
     data = request.json
     question = data['question']
-    grading_context = data['context'] # AI自身の採点結果を受け取る
+    grading_context = data['context']
 
     prompt = f"""
     あなたは、先ほどテストの採点を終えたAI先生です。
@@ -194,7 +202,8 @@ def ask_scoring():
 
     def generate_responses():
         try:
-            response_stream = model.generate_content(prompt, stream=True)
+            # Flashモデルを使用
+            response_stream = model_flash.generate_content(prompt, stream=True)
             for chunk in response_stream:
                 if chunk.text:
                     yield chunk.text
