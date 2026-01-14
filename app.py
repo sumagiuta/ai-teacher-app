@@ -19,11 +19,11 @@ except KeyError:
 
 # 1. 高性能モデル (Pro): 授業作成や採点など、高い思考能力が必要なタスク用
 # リストにあった 'gemini-3-pro-preview' を使用
-model_pro = genai.GenerativeModel('gemini-2-pro') 
+model_pro = genai.GenerativeModel('gemini-2.5-pro') 
 
 # 2. 高速モデル (Flash): チャットなど、レスポンス速度が重要なタスク用
 # リストにあった 'gemini-3-flash-preview' を使用
-model_flash = genai.GenerativeModel('gemini-2-pro')
+model_flash = genai.GenerativeModel('gemini-2.5-flash')
 
 # ==========================================================
 
